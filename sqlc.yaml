@@ -1,0 +1,65 @@
+# sqlc generates type-safe Go from SQL (ADR-0004).
+#
+# Each module owns its queries and gets its own generated package, which is
+# private to that module's Postgres adapter. Generated types never leave the
+# adapter: it maps them to domain types.
+#
+# Regenerate with: make generate
+version: "2"
+
+sql:
+  - engine: postgresql
+    schema: migrations
+    queries: internal/user/userpg/queries.sql
+    gen:
+      go: &go
+        package: userpg
+        out: internal/user/userpg
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        omit_unused_structs: true
+        output_db_file_name: sqlc_db.go
+        output_models_file_name: sqlc_models.go
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: UUID
+              pointer: true
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              import: time
+              type: Time
+              pointer: true
+          - db_type: pg_catalog.timestamptz
+            go_type: time.Time
+          - db_type: pg_catalog.timestamptz
+            nullable: true
+            go_type:
+              import: time
+              type: Time
+              pointer: true
+
+  - engine: postgresql
+    schema: migrations
+    queries: internal/auth/authpg/queries.sql
+    gen:
+      go:
+        <<: *go
+        package: authpg
+        out: internal/auth/authpg
+
+  - engine: postgresql
+    schema: migrations
+    queries: internal/note/notepg/queries.sql
+    gen:
+      go:
+        <<: *go
+        package: notepg
+        out: internal/note/notepg

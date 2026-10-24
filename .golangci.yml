@@ -1,0 +1,165 @@
+# golangci-lint v2 configuration (ADR-0017). Run with `make lint`.
+#
+# Besides bug-finding linters, depguard enforces the dependency rules of
+# ADR-0002, so architecture violations fail CI instead of being discovered
+# months later. Any exclusion must carry a comment explaining why.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - depguard
+    - errcheck
+    - errorlint
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - sloglint
+    - staticcheck
+    - unused
+    - wrapcheck
+
+  settings:
+    sloglint:
+      # When a context is in scope, use the *Context logging methods so
+      # trace_id / request_id are attached (ADR-0011).
+      context: scope
+
+    wrapcheck:
+      # Only errors crossing from third-party code need wrapping. Our own
+      # packages already return classified *errs.Error values.
+      ignore-package-globs:
+        - github.com/islamghany/goplate/*
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Join(
+        - .Wrap(
+        - .Validation(
+        - (net/http.ResponseWriter).Write(
+        # Both return our own callback's error unchanged; it is already classified.
+        - (*golang.org/x/sync/singleflight.Group).Do(
+        - github.com/jackc/pgx/v5.BeginTxFunc(
+
+    revive:
+      rules:
+        # Methods are exempt: most implement a port whose interface is
+        # already documented in the consuming module.
+        - name: exported
+          arguments: [disableStutteringCheck, disableChecksOnMethods]
+        - name: package-comments
+        - name: var-naming
+        - name: error-strings
+        - name: error-return
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: unexported-return
+        - name: context-as-argument
+
+    depguard:
+      rules:
+        # Domain core files (types, ports, services, transport) must not
+        # reach for infrastructure. Adapters live in <module>/<module>pg and
+        # internal/platform; the composition root wires them (ADR-0002).
+        module-core:
+          files:
+            - "**/internal/user/*.go"
+            - "**/internal/auth/*.go"
+            - "**/internal/note/*.go"
+            - "!$test" # tests may use real in-memory adapters
+          deny:
+            - pkg: github.com/islamghany/goplate/internal/platform
+              desc: modules depend on ports; adapters are wired in cmd/api (ADR-0002)
+            - pkg: github.com/islamghany/goplate/internal/config
+              desc: modules receive their own config struct (ADR-0016)
+            - pkg: github.com/jackc/pgx
+              desc: database access belongs in the <module>pg adapter (ADR-0004)
+            - pkg: github.com/redis
+              desc: use the cache/ratelimit ports (ADR-0009, ADR-0013)
+            - pkg: github.com/riverqueue
+              desc: use the jobs port (ADR-0010)
+
+        # Modules never import each other; the consumer declares a port and
+        # cmd/api bridges it (see cmd/api/adapters.go).
+        user-isolation:
+          files: ["**/internal/user/**"]
+          deny:
+            - pkg: github.com/islamghany/goplate/internal/auth
+              desc: modules must not import other modules (ADR-0002)
+            - pkg: github.com/islamghany/goplate/internal/note
+              desc: modules must not import other modules (ADR-0002)
+        auth-isolation:
+          files: ["**/internal/auth/**"]
+          deny:
+            - pkg: github.com/islamghany/goplate/internal/user
+              desc: modules must not import other modules (ADR-0002)
+            - pkg: github.com/islamghany/goplate/internal/note
+              desc: modules must not import other modules (ADR-0002)
+        note-isolation:
+          files: ["**/internal/note/**"]
+          deny:
+            - pkg: github.com/islamghany/goplate/internal/user
+              desc: modules must not import other modules (ADR-0002)
+            - pkg: github.com/islamghany/goplate/internal/auth
+              desc: modules must not import other modules (ADR-0002)
+
+        # Infrastructure adapters know nothing about business modules.
+        platform:
+          files: ["**/internal/platform/**"]
+          deny:
+            - pkg: github.com/islamghany/goplate/internal/user
+              desc: platform adapters must not depend on modules (ADR-0002)
+            - pkg: github.com/islamghany/goplate/internal/auth
+              desc: platform adapters must not depend on modules (ADR-0002)
+            - pkg: github.com/islamghany/goplate/internal/note
+              desc: platform adapters must not depend on modules (ADR-0002)
+            - pkg: github.com/islamghany/goplate/internal/config
+              desc: adapters take explicit parameters, not the global config (ADR-0016)
+
+        # Shared kernel packages stay dependency-light and module-agnostic.
+        kernel:
+          files:
+            - "**/internal/errs/**"
+            - "**/internal/validate/**"
+            - "**/internal/identity/**"
+            - "**/internal/page/**"
+            - "**/internal/jobs/**"
+            - "**/internal/cache/**"
+            - "**/internal/ratelimit/**"
+            - "**/internal/web/**"
+            - "**/internal/lifecycle/**"
+          deny:
+            - pkg: github.com/islamghany/goplate/internal/platform
+              desc: kernel packages must not depend on adapters
+            - pkg: github.com/islamghany/goplate/internal/config
+              desc: kernel packages must not read global config
+            - pkg: github.com/islamghany/goplate/internal/user
+              desc: kernel packages must not depend on modules
+            - pkg: github.com/islamghany/goplate/internal/auth
+              desc: kernel packages must not depend on modules
+            - pkg: github.com/islamghany/goplate/internal/note
+              desc: kernel packages must not depend on modules
+
+  exclusions:
+    generated: strict # skips sqlc output
+    rules:
+      # Tests may ignore errors and use dynamic values freely.
+      - path: _test\.go
+        linters: [errcheck, gosec, wrapcheck, noctx]
+      # Lifecycle/middleware closures return errors straight from the
+      # standard library by design; wrapping adds noise, not context.
+      - path: cmd/
+        linters: [wrapcheck]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes: [github.com/islamghany/goplate]

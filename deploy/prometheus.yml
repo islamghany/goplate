@@ -1,0 +1,10 @@
+# Scrapes the API's internal admin port. When the API runs on your machine
+# (make run), Prometheus reaches it through host.docker.internal; when it
+# runs in compose (--profile app), through the "api" service name.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: goplate
+    static_configs:
+      - targets: ["host.docker.internal:9090", "api:9090"]

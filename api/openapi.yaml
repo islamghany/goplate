@@ -1,0 +1,458 @@
+openapi: 3.1.0
+info:
+  title: goplate API
+  version: 1.0.0
+  description: |
+    Reference API for the goplate boilerplate.
+
+    **Authentication.** Log in with `POST /v1/auth/login`. Browsers receive
+    HttpOnly cookies (default); other clients send `"token_delivery": "body"`
+    and use `Authorization: Bearer <access_token>`. Access tokens are
+    short-lived; renew them with `POST /v1/auth/refresh`. Refresh tokens
+    rotate on every use, and reusing an old one revokes the session.
+
+    **Errors** use RFC 9457 problem details (`application/problem+json`).
+    Quote `request_id` when reporting a problem.
+
+    **Pagination** is cursor based: pass `next_cursor` from one page as
+    `cursor` to get the next. An absent `next_cursor` means the last page.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: auth
+  - name: users
+  - name: notes
+  - name: ops
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+
+paths:
+  /livez:
+    get:
+      tags: [ops]
+      summary: Liveness probe
+      description: 200 while the process is running. Never checks dependencies.
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Status" }
+
+  /readyz:
+    get:
+      tags: [ops]
+      summary: Readiness probe
+      description: 200 when every dependency is healthy; 503 otherwise or while shutting down.
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Status" }
+        "503": { $ref: "#/components/responses/Status" }
+
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Logged in. Tokens are in cookies, or in the body when requested.
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate the refresh token and get a new access token
+      description: |
+        Cookie clients send no body (the refresh cookie is used). Bearer
+        clients send `{"refresh_token": "..."}` and get tokens in the body.
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200":
+          description: New tokens.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Log out this session
+      responses:
+        "204": { description: Logged out. }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /v1/auth/logout-all:
+    post:
+      tags: [auth]
+      summary: Log out every session of the current user
+      responses:
+        "204": { description: Logged out everywhere. }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /v1/users:
+    post:
+      tags: [users]
+      summary: Register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Created.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [users]
+      summary: List users (admin only)
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of users.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPage" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+
+  /v1/users/me:
+    get:
+      tags: [users]
+      summary: Get the current user
+      responses:
+        "200":
+          description: The current user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Problem" }
+    patch:
+      tags: [users]
+      summary: Update the current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /v1/users/{id}:
+    get:
+      tags: [users]
+      summary: Get a user (self or admin)
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: The user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /v1/notes:
+    post:
+      tags: [notes]
+      summary: Create a note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NoteInput" }
+      responses:
+        "201":
+          description: Created.
+          headers:
+            Location: { schema: { type: string } }
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Note" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [notes]
+      summary: List my notes, newest first
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: tag
+          in: query
+          schema: { type: string, maxLength: 32 }
+        - name: q
+          in: query
+          description: Case-insensitive search in title and body.
+          schema: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: A page of notes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotePage" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /v1/notes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [notes]
+      summary: Get a note
+      responses:
+        "200":
+          description: The note.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Note" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    patch:
+      tags: [notes]
+      summary: Update a note (partial)
+      parameters:
+        - name: If-Match
+          in: header
+          description: ETag from a previous read. If the note changed since, the update fails with 412.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotePatch" }
+      responses:
+        "200":
+          description: Updated.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Note" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [notes]
+      summary: Delete a note
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-access_token
+
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor from a previous page's next_cursor.
+      schema: { type: string }
+
+  headers:
+    ETag:
+      description: The resource version, for If-Match.
+      schema: { type: string, example: '"3"' }
+
+  responses:
+    Problem:
+      description: An RFC 9457 problem.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Status:
+      description: Probe status.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { type: string }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: |
+            Problem type, one of /problems/{invalid, unauthenticated,
+            permission_denied, not_found, conflict, precondition_failed,
+            rate_limited, unavailable, internal}.
+          example: /problems/not_found
+        title: { type: string, example: Not Found }
+        status: { type: integer, example: 404 }
+        detail: { type: string, example: note not found }
+        instance: { type: string, example: /v1/notes/0192f0c4-7f43-7a3e-9f7a-5d1c3c4b2a10 }
+        request_id: { type: string }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/FieldError" }
+
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field: { type: string, example: title }
+        message: { type: string, example: is required }
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        token_delivery: { type: string, enum: [cookie, body], default: cookie }
+
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        refresh_token: { type: string }
+
+    TokenResponse:
+      type: object
+      required: [user_id, expires_at, refresh_expires_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        token_type: { type: string, enum: [Bearer], description: Only with body delivery. }
+        access_token: { type: string, description: Only with body delivery. }
+        expires_at: { type: string, format: date-time }
+        refresh_token: { type: string, description: Only with body delivery. }
+        refresh_expires_at: { type: string, format: date-time }
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, name, password]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        name: { type: string, maxLength: 100 }
+        password: { type: string, format: password, minLength: 12, maxLength: 128 }
+
+    User:
+      type: object
+      required: [id, email, name, role, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { type: string, enum: [user, admin] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    UserPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/User" }
+        next_cursor: { type: string }
+
+    NoteInput:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 200 }
+        body: { type: string, maxLength: 10000 }
+        tags:
+          type: array
+          maxItems: 10
+          items: { type: string, maxLength: 32 }
+
+    NotePatch:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string, maxLength: 200 }
+        body: { type: string, maxLength: 10000 }
+        tags:
+          type: array
+          maxItems: 10
+          items: { type: string, maxLength: 32 }
+
+    Note:
+      type: object
+      required: [id, title, body, tags, version, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        body: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    NotePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Note" }
+        next_cursor: { type: string }

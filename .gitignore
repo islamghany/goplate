@@ -1,0 +1,15 @@
+# Local configuration and secrets: only .env.example is committed.
+.env
+.env.*
+!.env.example
+
+# Build output and pinned tools (make tools)
+/bin/
+/dist/
+coverage.out
+coverage.html
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

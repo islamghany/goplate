@@ -1,0 +1,74 @@
+# Local development stack (ADR-0017).
+#
+#   make up           Postgres, Redis, Jaeger, Prometheus
+#   make run          the API on your machine, against this stack
+#
+# Or run everything in containers, including the API:
+#   docker compose --profile app up --build
+#
+# UIs: Jaeger http://localhost:16686  Prometheus http://localhost:9091
+name: goplate
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: goplate
+      POSTGRES_PASSWORD: goplate
+      POSTGRES_DB: goplate
+    ports: ["5432:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goplate -d goplate"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0
+    ports:
+      - "16686:16686" # UI
+      - "4318:4318"   # OTLP over HTTP
+
+  prometheus:
+    image: prom/prometheus:v3.13.5
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes: ["./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9091:9090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+
+  # --- Optional: the application itself (docker compose --profile app up) ---
+  migrate:
+    profiles: [app]
+    build: .
+    entrypoint: ["/app/admin", "migrate", "up"]
+    environment:
+      POSTGRES_URL: postgres://goplate:goplate@postgres:5432/goplate?sslmode=disable
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  api:
+    profiles: [app]
+    build: .
+    env_file: [.env]
+    environment:
+      POSTGRES_URL: postgres://goplate:goplate@postgres:5432/goplate?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      LOG_FORMAT: json
+    ports: ["8080:8080", "9090:9090"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+volumes:
+  postgres-data:
