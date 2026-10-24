@@ -35,12 +35,14 @@ See [ADR-0001](0001-record-architecture-decisions.md) for the rules and
 | 0018 | [Domain error kinds rendered as RFC 9457 problems](0018-error-model-and-rfc9457-problem-details.md)       | Accepted | api |
 | 0019 | [Migrations with goose via an admin command](0019-database-migrations-with-goose.md)                      | Accepted | data |
 | 0020 | [Target a supported Go release (1.26 min, 1.27 toolchain)](0020-target-a-supported-go-release.md) | Accepted | tooling |
+| 0021 | [Cross-module reads: compose in the service, JOIN only published views](0021-cross-module-reads.md) | Accepted | architecture, data |
 
 ## How the decisions fit together
 
 ```mermaid
 flowchart LR
     A2["0002 Domain modules<br/>(ports at the consumer)"] --> A5["0005 Manual DI"]
+    A2 --> A21["0021 Cross-module reads"]
     A2 --> A3["0003 stdlib router + web"]
     A2 --> A4["0004 sqlc + pgxpool<br/>+ context tx"]
     A4 --> A10["0010 River jobs<br/>(enqueue in same tx)"]

@@ -38,6 +38,8 @@ Run `make generate`.
   `Transactor`, `JobEnqueuer` or a cache only if you use them.
 - If you need another module (for example, users), declare an interface here
   in your own terms. Don't import that module; you'll bridge it in step 7.
+  To show its data alongside yours (a "join"), follow
+  [cross-module-reads.md](cross-module-reads.md).
 - Job argument types, if any (`Kind()` must never change once deployed).
 
 This file imports only the kernel (`errs`, `identity`, `page`, `jobs`, …).

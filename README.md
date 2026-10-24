@@ -105,6 +105,7 @@ internal/
 docs/
   adr/                  architecture decision records
   adding-a-module.md
+  cross-module-reads.md   how to "join" across modules
 ```
 
 ---
@@ -423,6 +424,10 @@ make check              # all of the above + stale-sqlc check
 
 - **Add a module**: follow [`docs/adding-a-module.md`](docs/adding-a-module.md);
   `internal/note` is the reference to copy.
+- **Show data from another module** (for example posts with their author):
+  read [`docs/cross-module-reads.md`](docs/cross-module-reads.md). The
+  short version is: batch-load it through a port, never `JOIN` another
+  module's tables.
 - **Remove the example module**: delete `internal/note`, its migration, its
   block in `sqlc.yaml`, its paths in `api/openapi.yaml`, and the
   `notes` lines in `cmd/api/app.go` and `cmd/api/http.go`.
