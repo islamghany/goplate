@@ -32,6 +32,7 @@ recorded in [`docs/adr`](docs/adr/README.md).
 - [Testing](#testing)
 - [Adding and removing features](#adding-and-removing-features)
 - [Deploying](#deploying)
+- [License](#license)
 
 ---
 
@@ -452,3 +453,10 @@ binaries.
    only.
 5. Set `HTTP_TRUSTED_PROXIES` to your load balancer's CIDRs, or rate limits
    will key on the proxy's IP.
+
+---
+
+## License
+
+[MIT](LICENSE). Projects started from goplate may use any license they like;
+keep the copyright notice in copies of goplate itself.
